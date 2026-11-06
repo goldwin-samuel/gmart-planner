@@ -7,7 +7,7 @@ const config: CapacitorConfig = {
   backgroundColor: '#080d1a',
   plugins: {
     // Native HTTP avoids CORS problems with the Google Apps Script backend on device.
-    CapacitorHttp: { enabled: true },
+    CapacitorHttp: { enabled: false },
     SplashScreen: {
       launchShowDuration: 0,
       launchAutoHide: false,

@@ -1,4 +1,4 @@
-import { Component, ElementRef, ViewChild, inject, signal } from '@angular/core';
+import { Component, ElementRef, ViewChild, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Capacitor } from '@capacitor/core';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
@@ -7,7 +7,7 @@ import { ApiService } from '../core/api.service';
 import { categorize, cleanName } from '../core/categorize';
 import { FeedbackService } from '../core/feedback.service';
 import { compressImage } from '../core/image';
-import { UNITS } from '../core/models';
+import { Item, UNITS } from '../core/models';
 import { StoreService } from '../core/store.service';
 import { categoryEmoji, todayISO } from '../core/utils';
 
@@ -21,6 +21,7 @@ interface Line {
   amount: number | null;
   matchId?: string;
   locked: boolean; // user picked the category by hand – stop auto-categorising
+  pinned?: boolean; // user chose the target item (or 'new') by hand – stop auto-matching
 }
 
 type Step = 'pick' | 'scanning' | 'review';
@@ -96,6 +97,12 @@ type Step = 'pick' | 'scanning' | 'review';
           @if (note()) {
             <div class="scan-note"><ion-icon name="information-circle-outline"></ion-icon><span>{{ note() }}</span></div>
           }
+          @if (raw()) {
+            <details class="scan-raw">
+              <summary>What the scanner read (copy lines into the items below)</summary>
+              <pre>{{ raw() }}</pre>
+            </details>
+          }
 
           <div class="rv-list">
             @for (l of lines(); track l.key) {
@@ -110,7 +117,7 @@ type Step = 'pick' | 'scanning' | 'review';
                 <div class="rv-grid">
                   <div class="field">
                     <label>Category</label>
-                    <select class="inp" [(ngModel)]="l.category" (ngModelChange)="l.locked = true">
+                    <select class="inp" [(ngModel)]="l.category" (ngModelChange)="l.locked = true" [disabled]="!!l.matchId">
                       @for (c of cats(); track c) { <option [value]="c">{{ emoji(c) }} {{ c }}</option> }
                     </select>
                   </div>
@@ -129,8 +136,22 @@ type Step = 'pick' | 'scanning' | 'review';
                     <input class="inp" type="number" inputmode="decimal" step="0.01" min="0" [(ngModel)]="l.amount" />
                   </div>
                 </div>
+                <div class="field link-field" style="margin: 10px 0 0">
+                  <label>Add to item</label>
+                  <select class="inp" [ngModel]="l.matchId ?? ''" (ngModelChange)="link(l, $event)">
+                    <option value="">➕ New item{{ l.name.trim() ? ' “' + l.name.trim() + '”' : '' }}</option>
+                    @if (suggest(l).length) {
+                      <optgroup label="Suggested matches">
+                        @for (i of suggest(l); track i.id) { <option [value]="i.id">{{ emoji(i.category) }} {{ i.name }}</option> }
+                      </optgroup>
+                    }
+                    <optgroup label="All items">
+                      @for (i of sortedItems(); track i.id) { <option [value]="i.id">{{ emoji(i.category) }} {{ i.name }} · {{ i.category }}</option> }
+                    </optgroup>
+                  </select>
+                </div>
                 @if (l.matchId) {
-                  <span class="tag ok"><ion-icon name="checkmark-circle"></ion-icon> Matches an item in your list</span>
+                  <span class="tag ok"><ion-icon name="checkmark-circle"></ion-icon> Will be added to “{{ itemName(l.matchId) }}”</span>
                 } @else if (l.on && l.name.trim()) {
                   <span class="tag"><ion-icon name="sparkles-outline"></ion-icon> New item will be created</span>
                 }
@@ -178,6 +199,7 @@ export class ScanModal {
   preview = signal('');
   error = signal('');
   note = signal('');
+  raw = signal('');
   lines = signal<Line[]>([]);
   billTotal = signal<number | null>(null);
   shop = '';
@@ -185,6 +207,49 @@ export class ScanModal {
   private seq = 1;
 
   cats = () => this.store.allCategories();
+
+  sortedItems = computed(() => [...this.store.items()].sort((a, b) => a.name.localeCompare(b.name)));
+
+  itemName(id: string) {
+    return this.store.items().find((i) => i.id === id)?.name ?? '';
+  }
+
+  /** Up to 4 existing items that share words with the scanned name (best first). */
+  suggest(l: Line): Item[] {
+    const words = (t: string) => new Set(t.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w) => w.length >= 3));
+    const mine = words(l.name);
+    if (!mine.size) return [];
+    return this.store
+      .items()
+      .map((i) => {
+        const theirs = words(i.name);
+        let hit = 0;
+        mine.forEach((w) => {
+          if (theirs.has(w) || [...theirs].some((x) => x.startsWith(w) || w.startsWith(x))) hit++;
+        });
+        return { i, score: hit / Math.max(1, Math.min(mine.size, theirs.size)) };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 4)
+      .map((x) => x.i);
+  }
+
+  /** Map this scanned line to an existing item (or back to "new"). */
+  link(l: Line, id: string) {
+    l.pinned = true;
+    if (!id) {
+      l.matchId = undefined;
+    } else {
+      const it = this.store.items().find((x) => x.id === id);
+      if (it) {
+        l.matchId = id;
+        l.category = it.category;
+        if (it.lastUnit && UNITS.includes(it.lastUnit)) l.unit = it.lastUnit;
+      }
+    }
+    this.lines.update((x) => [...x]);
+  }
 
   count = () => this.lines().filter((l) => this.valid(l)).length;
   sum = () => this.lines().filter((l) => this.valid(l)).reduce((a, l) => a + Number(l.amount), 0);
@@ -269,6 +334,7 @@ export class ScanModal {
     this.date = /^\d{4}-\d{2}-\d{2}$/.test(String(r['date'] ?? '')) && r['date'] <= this.today ? r['date'] : this.today;
     this.billTotal.set(Number(r['total']) > 0 ? Number(r['total']) : null);
     this.note.set(String(r['note'] ?? ''));
+    this.raw.set(String(r['raw'] ?? ''));
     this.lines.set(lines.length ? lines : [this.blank()]);
     this.step.set('review');
   }
@@ -282,6 +348,7 @@ export class ScanModal {
   manual() {
     this.preview.set('');
     this.note.set('');
+    this.raw.set('');
     this.billTotal.set(null);
     this.lines.set([this.blank()]);
     this.step.set('review');
@@ -303,6 +370,7 @@ export class ScanModal {
 
   /** Re-run matching/categorising when the name is edited (unless the category was set by hand). */
   rematch(l: Line) {
+    if (l.pinned) return;
     const c = categorize(l.name, this.store.items(), this.store.allCategories());
     l.matchId = c.itemId;
     if (!l.locked && c.via !== 'none') l.category = c.category;
