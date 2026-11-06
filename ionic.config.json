@@ -1,0 +1,5 @@
+{
+  "name": "gmart-planner",
+  "integrations": { "capacitor": {} },
+  "type": "angular-standalone"
+}

@@ -1,0 +1,64 @@
+:root {
+  --accent: #6366f1;
+  --accent-2: #8b5cf6;
+  --accent-rgb: 99, 102, 241;
+
+  --bg: #f5f6fa;
+  --surface: #ffffff;
+  --surface-2: #f2f4f9;
+  --surface-3: #e7eaf2;
+  --ink: #0b1020;
+  --ink-2: #4a5468;
+  --ink-3: #8a94a8;
+  --line: #e6e9f1;
+
+  --good: #059669;
+  --warn: #d97706;
+  --bad: #e11d48;
+
+  --radius: 18px;
+  --radius-sm: 12px;
+  --gap: 16px;
+  --pad: 20px;
+  --row-h: 66px;
+
+  --shadow: 0 1px 2px rgba(11, 16, 32, 0.04), 0 10px 28px -14px rgba(11, 16, 32, 0.14);
+  --shadow-pop: 0 24px 60px -18px rgba(11, 16, 32, 0.4);
+
+  --side-bg: #0b1020;
+  --side-ink: #aab3c8;
+  --hero-bg: #0b1020;
+
+  --ion-font-family: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --ion-color-primary: #6366f1;
+  --ion-color-primary-rgb: 99, 102, 241;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #6366f1;
+  --ion-color-primary-tint: #8b5cf6;
+}
+
+html[data-density='compact'] {
+  --gap: 12px;
+  --pad: 14px;
+  --row-h: 52px;
+}
+
+html[data-corners='sharp'] {
+  --radius: 8px;
+  --radius-sm: 6px;
+}
+
+html.ion-palette-dark {
+  --bg: #070a14;
+  --surface: #0f1424;
+  --surface-2: #161c31;
+  --surface-3: #1f2742;
+  --ink: #eef1f8;
+  --ink-2: #a3aec5;
+  --ink-3: #66718a;
+  --line: rgba(255, 255, 255, 0.08);
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 14px 34px -16px rgba(0, 0, 0, 0.75);
+  --side-bg: #050711;
+  --hero-bg: #151d3a;
+}
