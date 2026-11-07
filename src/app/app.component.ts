@@ -7,6 +7,11 @@ import { IonApp, IonRouterOutlet } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
 import {
   add,
+  mic,
+  micOutline,
+  volumeHighOutline,
+  volumeMuteOutline,
+  warningOutline,
   addCircleOutline,
   alertCircleOutline,
   appsOutline,
@@ -96,6 +101,11 @@ export class AppComponent {
 
   constructor() {
     addIcons({
+      mic,
+      'mic-outline': micOutline,
+      'volume-high-outline': volumeHighOutline,
+      'volume-mute-outline': volumeMuteOutline,
+      'warning-outline': warningOutline,
       'camera-outline': cameraOutline,
       'images-outline': imagesOutline,
       'scan-outline': scanOutline,

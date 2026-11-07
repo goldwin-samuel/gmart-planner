@@ -10,6 +10,7 @@ import { FeedbackService } from '../../core/feedback.service';
 import { LayoutService } from '../../core/layout.service';
 import { StoreService } from '../../core/store.service';
 import { ThemeService } from '../../core/theme.service';
+import { VoiceControlService } from '../../core/voice-control.service';
 import { ModalsService } from '../../modals/modals.service';
 
 type Nav = 'home' | 'list' | 'money' | 'insights' | 'categories' | 'more' | 'admin';
@@ -90,6 +91,9 @@ type Nav = 'home' | 'list' | 'money' | 'insights' | 'categories' | 'more' | 'adm
             <button class="sync-pill" [class.err]="store.sync() === 'error'" (click)="store.syncNow()">
               <ion-icon [name]="syncIcon()" [class.spin-i]="store.sync() === 'syncing'"></ion-icon>{{ syncText() }}
             </button>
+            <button class="icon-btn flat mic-top" (click)="voiceControl()" aria-label="Voice control" title="Voice control">
+              <ion-icon name="mic-outline"></ion-icon>
+            </button>
             <button class="icon-btn flat" (click)="toggleDark()" [attr.aria-label]="'Toggle dark mode'">
               <ion-icon [name]="theme.isDark() ? 'sunny-outline' : 'moon-outline'"></ion-icon>
             </button>
@@ -163,6 +167,7 @@ type Nav = 'home' | 'list' | 'money' | 'insights' | 'categories' | 'more' | 'adm
           }
         </header>
 
+        <button class="mic-fab" (click)="voiceControl()" aria-label="Voice control"><ion-icon name="mic"></ion-icon></button>
         <ion-tabs>
           <ion-tab-bar slot="bottom" class="gm-tabbar">
             <ion-tab-button tab="home" (click)="fb.tap()">
@@ -199,9 +204,21 @@ type Nav = 'home' | 'list' | 'money' | 'insights' | 'categories' | 'more' | 'adm
             <span class="am-ico in"><ion-icon name="arrow-down-circle-outline"></ion-icon></span>
             <span><b>Record income</b><small>Salary, business, refunds…</small></span>
           </button>
+          <button role="menuitem" (click)="pick('voice')">
+            <span class="am-ico voice"><ion-icon name="mic-outline"></ion-icon></span>
+            <span><b>Add by voice</b><small>Speak a purchase – I’ll guide you</small></span>
+          </button>
+          <button role="menuitem" (click)="pick('voice-income')">
+            <span class="am-ico voice"><ion-icon name="mic-outline"></ion-icon></span>
+            <span><b>Income by voice</b><small>“Received 50000 salary”</small></span>
+          </button>
           <button role="menuitem" (click)="pick('scan')">
             <span class="am-ico scan"><ion-icon name="camera-outline"></ion-icon></span>
             <span><b>Scan a bill</b><small>Photo → items, auto-sorted</small></span>
+          </button>
+          <button role="menuitem" (click)="pick('bulk')">
+            <span class="am-ico bulk"><ion-icon name="document-text-outline"></ion-icon></span>
+            <span><b>Bulk upload</b><small>Excel template → review → add</small></span>
           </button>
         </div>
       }
@@ -285,10 +302,21 @@ export class TabsPage {
     this.menu.update((v) => !v);
   }
 
-  pick(what: 'item' | 'income' | 'scan') {
+  private vc = inject(VoiceControlService);
+
+  voiceControl() {
+    this.fb.tap();
+    this.menu.set(false);
+    void this.vc.start();
+  }
+
+  pick(what: 'item' | 'income' | 'scan' | 'bulk' | 'voice' | 'voice-income') {
     this.menu.set(false);
     if (what === 'item') void this.modals.addItem();
     else if (what === 'income') void this.modals.income();
+    else if (what === 'bulk') void this.modals.bulk();
+    else if (what === 'voice') void this.modals.voiceEntry('purchase');
+    else if (what === 'voice-income') void this.modals.voiceEntry('income');
     else void this.modals.scan();
   }
 
@@ -310,6 +338,10 @@ export class TabsPage {
     if (ev.key === '/' && !typing && this.layout.isDesktop()) {
       ev.preventDefault();
       this.gs?.nativeElement.focus();
+    }
+    if (ev.altKey && ev.key.toLowerCase() === 'v') {
+      ev.preventDefault();
+      this.voiceControl();
     }
     if (ev.key === 'Escape') {
       this.layout.themePanel.set(false);

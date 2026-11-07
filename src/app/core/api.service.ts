@@ -69,7 +69,7 @@ export class ApiService {
   }
   /** Sends a (compressed) bill photo for OCR. Can take a while, so the timeout is generous. */
   scanBill(image: string, mime: string, categories: string[]) {
-    return this.request('scanBill', { image, mime, categories }, 'POST', 90000);
+    return this.request('scanBill', { image, mime, categories }, 'POST', 120000);
   }
   getSettings() {
     return this.request('getSettings', {}, 'GET');

@@ -496,12 +496,74 @@ function scanBill(data) {
   const out = parseReceiptText_(text);
   const res = Object.assign({ status: "success", engine: "ocr" }, out);
   if (aiError) res.note = "AI scan unavailable (" + aiError + "); used basic OCR.";
-  if (!out.items.length) res.note = (res.note ? res.note + " " : "") + "No line items detected. Add them manually.";
+  if (!out.items.length) {
+    res.note = (res.note ? res.note + " " : "") + "No line items detected. Add them manually.";
+    res.raw = s_(text).substring(0, 1200);
+  }
   return res;
 }
 
+/** Ordered list of Gemini models to try: pinned model, else discovered (stable newest first) + safe fallbacks. */
+function geminiModels_(key, forceDiscover) {
+  const fixed = PropertiesService.getScriptProperties().getProperty("GEMINI_MODEL");
+  if (fixed) return [fixed];
+  const cache = CacheService.getScriptCache();
+  if (!forceDiscover) {
+    const hit = cache.get("gm_gemini_models");
+    if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  }
+  let list = [], lite = [];
+  try {
+    const r = UrlFetchApp.fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", {
+      headers: { "x-goog-api-key": key }, muteHttpExceptions: true,
+    });
+    if (r.getResponseCode() === 200) {
+      const all = (JSON.parse(r.getContentText()).models || []).filter(function (m) {
+        return (m.supportedGenerationMethods || []).indexOf("generateContent") >= 0 &&
+          /gemini-[\d.]+-flash/i.test(m.name) &&
+          !/(image|tts|live|audio|thinking|exp|robotics|computer|embedding|native)/i.test(m.name);
+      });
+      const score = function (m) {
+        const v = (m.name.match(/gemini-([\d.]+)-flash/i) || [0, "0"])[1];
+        return parseFloat(v) * 10 + (/preview/i.test(m.name) ? 0 : 5);
+      };
+      all.sort(function (a, b) { return score(b) - score(a); });
+      const nm = function (m) { return m.name.replace(/^models\//, ""); };
+      list = all.filter(function (m) { return !/lite/i.test(m.name); }).map(nm);
+      lite = all.filter(function (m) { return /lite/i.test(m.name); }).map(nm);
+    }
+  } catch (e) {}
+  // two newest regular models, then the newest lite model (less busy, bigger free quota), then a safe alias
+  const out = list.slice(0, 2);
+  if (lite.length) out.push(lite[0]);
+  if (out.indexOf("gemini-flash-latest") < 0) out.push("gemini-flash-latest");
+  cache.put("gm_gemini_models", JSON.stringify(out), 21600);
+  return out;
+}
+
+/** Used by listGeminiModels(); returns the first model the scanner will try. */
+function pickGeminiModel_(key, forceDiscover) { return geminiModels_(key, forceDiscover)[0]; }
+
 function geminiScan_(key, b64, mime, cats) {
-  const model = PropertiesService.getScriptProperties().getProperty("GEMINI_MODEL") || "gemini-2.5-flash";
+  const started = Date.now();
+  const BUDGET_MS = 35000; // never start another attempt after this; the app waits ~2 minutes in total
+  const errors = [];
+  let models = geminiModels_(key, false).slice(0, 4);
+  for (let i = 0; i < models.length; i++) {
+    if (i > 0 && Date.now() - started > BUDGET_MS) break;
+    try {
+      return geminiCall_(key, b64, mime, cats, models[i]);
+    } catch (err) {
+      errors.push(err.message);
+      const code = Number((String(err.message).match(/HTTP (\d{3})/) || [0, 0])[1]);
+      if (code === 400 || code === 401 || code === 403) throw err; // bad key / request: other models will not help
+      if (code === 404 && i === 0) models = geminiModels_(key, true).slice(0, 4); // model retired: rediscover
+    }
+  }
+  throw new Error(errors[errors.length - 1] || "Gemini unavailable");
+}
+
+function geminiCall_(key, b64, mime, cats, model) {
   const prompt =
     "You read photos of retail bills / receipts. Return ONLY JSON: " +
     '{"shop": string, "date": "YYYY-MM-DD" or "", "total": number, "items": [{"name": string, "qty": number, "unit": string, "amount": number, "category": string}]}. ' +
@@ -519,7 +581,11 @@ function geminiScan_(key, b64, mime, cats) {
       generationConfig: { temperature: 0, responseMimeType: "application/json" },
     }),
   });
-  if (resp.getResponseCode() !== 200) throw new Error("HTTP " + resp.getResponseCode());
+  if (resp.getResponseCode() !== 200) {
+    let why = "";
+    try { why = JSON.parse(resp.getContentText()).error.message || ""; } catch (e) {}
+    throw new Error("HTTP " + resp.getResponseCode() + " (" + model + ") " + why.substring(0, 140));
+  }
   const body = JSON.parse(resp.getContentText());
   const txt = body.candidates && body.candidates[0] && body.candidates[0].content && body.candidates[0].content.parts[0].text;
   if (!txt) throw new Error("empty AI response");
@@ -549,7 +615,16 @@ function driveOcr_(b64, mime) {
   const up = UrlFetchApp.fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&ocrLanguage=" + lang + "&fields=id", {
     method: "post", contentType: "multipart/related; boundary=" + boundary, payload: payload, headers: auth, muteHttpExceptions: true,
   });
-  if (up.getResponseCode() !== 200) throw new Error("OCR upload failed (" + up.getResponseCode() + "). Re-authorise the script after adding the Drive scope.");
+  if (up.getResponseCode() !== 200) {
+    const body = up.getContentText();
+    if (/SERVICE_DISABLED|has not been used|accessNotConfigured/i.test(body)) {
+      throw new Error("Drive API is switched off for this script. In the Apps Script editor click Services (+) -> Drive API -> Add, then deploy a new version. (Or add a GEMINI_API_KEY script property.)");
+    }
+    if (up.getResponseCode() === 403 || up.getResponseCode() === 401) {
+      throw new Error("Drive permission missing. Run setup() once and tick all permission boxes, then deploy a new version. Details: " + body.substring(0, 160));
+    }
+    throw new Error("OCR upload failed (" + up.getResponseCode() + "): " + body.substring(0, 160));
+  }
   const id = JSON.parse(up.getContentText()).id;
   try {
     const ex = UrlFetchApp.fetch("https://www.googleapis.com/drive/v3/files/" + id + "/export?mimeType=text/plain", { headers: auth, muteHttpExceptions: true });
@@ -601,7 +676,7 @@ function parseReceiptText_(text) {
 
   for (let i = 0; i < Math.min(lines.length, 8) && !shop; i++) {
     const l = lines[i];
-    if ((l.match(/[A-Za-z]/g) || []).length >= 4 && !SKIP.test(l) && !/\d{6,}/.test(l) && !parseDate_(l)) shop = l.replace(/[^A-Za-z0-9&'.\- ]/g, "").trim();
+    if ((l.match(/[A-Za-z]/g) || []).length >= 6 && !SKIP.test(l) && !/\d{6,}/.test(l) && !parseDate_(l)) shop = l.replace(/[^A-Za-z0-9&'.\- ]/g, "").trim();
   }
   lines.forEach(function (l) { if (!date) date = parseDate_(l); });
 
@@ -629,6 +704,14 @@ function parseReceiptText_(text) {
 
     // item count: explicit "n x rate", or a "qty rate amount" layout, or "Eggs 12 78.00"
     let count = xCount;
+    if (count === null && mids.length >= 1) {
+      // "rate qty amount": find the pair whose product equals the amount
+      for (let a = 0; a < mids.length && count === null; a++) {
+        for (let b = 0; b < mids.length; b++) {
+          if (a !== b && mids[b] <= mids[a] && Number.isInteger(mids[b]) && mids[b] > 0 && mids[b] < 100 && Math.abs(mids[a] * mids[b] - amount) <= 1) { count = mids[b]; break; }
+        }
+      }
+    }
     if (count === null && mids.length >= 2 && mids[0] > 0 && mids[0] < 100) count = mids[0];
     if (count === null && mids.length === 1 && Number.isInteger(mids[0]) && mids[0] > 1 && mids[0] < 100) count = mids[0];
 
@@ -662,4 +745,19 @@ function setup() {
 function testParser() {
   const sample = "G-MART SUPERMARKET\nGSTIN 29ABCDE1234F1Z5\nDate: 05/11/2026\nAmul Toned Milk 1L  2  56.00  112.00\nBananas 1.2kg  72.00\nBasmati Rice 5kg  610.00\nSUB TOTAL 794.00\nCGST 0.00\nGRAND TOTAL 794.00";
   Logger.log(JSON.stringify(parseReceiptText_(sample), null, 1));
+}
+
+/** Run from the editor to see which Gemini models your key can use. */
+function listGeminiModels() {
+  const key = PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
+  if (!key) { Logger.log("No GEMINI_API_KEY script property set"); return; }
+  const r = UrlFetchApp.fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", {
+    headers: { "x-goog-api-key": key }, muteHttpExceptions: true,
+  });
+  Logger.log("HTTP " + r.getResponseCode());
+  if (r.getResponseCode() !== 200) { Logger.log(r.getContentText().substring(0, 400)); return; }
+  JSON.parse(r.getContentText()).models
+    .filter(function (m) { return (m.supportedGenerationMethods || []).indexOf("generateContent") >= 0; })
+    .forEach(function (m) { Logger.log(m.name); });
+  Logger.log("Scanner will try, in order: " + geminiModels_(key, true).join(", "));
 }

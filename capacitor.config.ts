@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   webDir: 'www',
   backgroundColor: '#080d1a',
   plugins: {
-    // Native HTTP avoids CORS problems with the Google Apps Script backend on device.
+    // Use the WebView fetch: native HTTP re-encodes the text/plain body and follows the Apps Script redirect differently.
     CapacitorHttp: { enabled: false },
     SplashScreen: {
       launchShowDuration: 0,

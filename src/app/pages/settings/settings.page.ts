@@ -164,7 +164,7 @@ import { ModalsService } from '../../modals/modals.service';
               </button>
             </div>
 
-            <p class="muted" style="text-align: center; margin: 4px 0 0">G-Mart Planner · v3.0</p>
+            <p class="muted" style="text-align: center; margin: 4px 0 0">G-Mart Planner · v3.1</p>
           </div>
         </div>
       </div>

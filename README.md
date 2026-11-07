@@ -1,10 +1,13 @@
-# G-Mart Planner v3 — Angular 19 · Ionic 8 · Capacitor 7
+# G-Mart Planner v3.1 — Angular 19 · Ionic 8 · Capacitor 7
 
 Grocery + money tracker for web and Android/iOS.
 
 - **Shopping** – list, checkout, price history, shop and notes on every purchase, edit/delete anywhere
 - **Money** – income entries, expense vs income, balance sheet (monthly + running balance), savings rate, charts
 - **Bill scanner** – photo of a bill → items, prices, shop and date read automatically → categorised → you review/edit → approve
+- **Bulk upload** – download an Excel template, fill it, upload → review/edit every row (map to existing items) → approve
+- **Voice entry** – say a purchase or income; the app asks for whatever is missing, confirms, then saves
+- **Voice control** – navigate and run actions by voice (mic button, or Alt+V on desktop)
 - **Dashboard / Insights** – budget ring, trends, category + shop breakdown, price alerts
 - Offline-first sync with Google Sheets through an Apps Script backend
 
@@ -81,6 +84,24 @@ iOS: `npx cap add ios` on a Mac, then `npx cap open ios`.
   and are auto-categorised from keywords (Dairy, Fruits, Vegetables, Grocery, Snacks, Beverages, Household, Personal Care).
 - You can edit name / category / quantity / unit / amount, untick lines to skip them, add missing lines, and fix the
   shop and date before pressing **Approve & add**.
+
+## Bulk upload (Excel)
+Add → **Bulk upload** → *Download template* (`.xlsx` with a Purchases sheet + a Guide sheet) → fill one row per item
+(`Date, Item, Category, Quantity, Unit, Amount, Shop, Notes`; only **Item** and **Amount** are required) → *Upload filled file*
+(`.xlsx`, `.xls` or `.csv`). Dates may be `2026-11-05`, `05/11/2026` or real Excel dates; units like `kgs`, `ltr`, `pcs` are understood.
+Every row is shown for review: fix values, change the category, map it to an existing item, untick rows, then **Approve**.
+Rows that still miss a name/amount are highlighted and skipped.
+
+## Voice
+- **Add → Add by voice / Income by voice** – a short conversation. Say everything at once
+  (“bought 2 kilos tomato for 80 rupees at DMart yesterday”) or one thing at a time; the app asks for the item, quantity, amount and shop,
+  reads the entry back and saves when you say *yes*. Say *change amount to 90*, *shop is Reliance*, *category dairy*, *date yesterday*,
+  *done* or *cancel* at any time. Everything is also editable on screen.
+- **Mic button (or Alt+V)** – voice control: *open money*, *go to insights*, *search milk*, *show dairy*, *add purchase*, *add income*,
+  *scan a bill*, *bulk upload*, *open checkout*, *dark mode*, *sync now*, *how much did I spend this month*, *what's my balance*,
+  *open tomato*, or a whole purchase (“3 kg rice 180 rupees at DMart”).
+- Works in Chrome / Edge / Safari and in the Android app (uses the phone's speech service – needs the Google app / internet).
+  Firefox has no speech recognition; the screens still work by typing. Language: English (India).
 
 ## Project layout
 ```

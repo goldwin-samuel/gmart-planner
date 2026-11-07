@@ -7,6 +7,9 @@ import { CheckoutModal } from './checkout.modal';
 import { EntryModal } from './entry.modal';
 import { IncomeModal } from './income.modal';
 import { ScanModal } from './scan.modal';
+import { BulkModal } from './bulk.modal';
+import { VoiceCommandModal } from './voice-command.modal';
+import { VoiceEntryModal } from './voice-entry.modal';
 import { PasswordModal } from './password.modal';
 
 @Injectable({ providedIn: 'root' })
@@ -28,6 +31,18 @@ export class ModalsService {
 
   scan() {
     return this.open(ScanModal, {}, 0.96, 760);
+  }
+
+  bulk() {
+    return this.open(BulkModal, {}, 0.96, 780);
+  }
+
+  voiceEntry(mode: 'purchase' | 'income', initialText = '') {
+    return this.open(VoiceEntryModal, { mode, initialText }, 0.96, 780);
+  }
+
+  voiceCommand(notice = '') {
+    return this.open(VoiceCommandModal, { notice }, 0.75, 560);
   }
 
   checkout() {
